@@ -261,6 +261,7 @@ for INPUT in "${FILES[@]}"; do
         -c:a aac -b:a 192k \
         -af "loudnorm=I=-16:TP=-1.5:LRA=11" \
         -c:s copy \
+        -movflags use_metadata_flags \
         -metadata "$MARKER_KEY=$MARKER_VALUE" \
         "$TEMP"
     then
