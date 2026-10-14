@@ -50,6 +50,12 @@ Video is not re-encoded.
 EOF
 }
 
+# Helper function to convert seconds into HH:MM:SS format
+format_time() {
+    local T="$1"
+    printf "%02d:%02d:%02d" $((T/3600)) $(( (T%3600)/60 )) $((T%60))
+}
+
 # --------------------------------------------------
 # Check dependencies
 # --------------------------------------------------
@@ -252,8 +258,17 @@ for INPUT in "${FILES[@]}"; do
     # - All streams are retained
     # - Marker is written into container metadata
     # ------------------------------------------------
-
-    if ffmpeg -hide_banner -loglevel warning \
+    
+    # Get total duration in microseconds for progress calculation
+    DURATION_SEC=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$INPUT")
+    # Default to 1 if duration is missing to avoid division by zero
+    [[ -z "$DURATION_SEC" ]] && DURATION_SEC=1
+    DURATION_MS=$(awk "BEGIN {print int($DURATION_SEC * 1000000)}")
+    TOTAL_STR=$(format_time "${DURATION_SEC%.*}")
+    
+    # Run FFmpeg with progress piped out
+    if ffmpeg -hide_banner -loglevel error \
+        -probesize 5M -analyzeduration 5M \
         -i "$INPUT" \
         -map 0 \
         -map_metadata 0 \
@@ -261,9 +276,23 @@ for INPUT in "${FILES[@]}"; do
         -c:a aac -b:a 192k \
         -af "loudnorm=I=-16:TP=-1.5:LRA=11" \
         -c:s copy \
-        -movflags use_metadata_flags \
+        -movflags use_metadata_tags \
         -metadata "$MARKER_KEY=$MARKER_VALUE" \
-        "$TEMP"
+        -progress pipe:1 \
+        "$TEMP" 2>&1 | while IFS='=' read -r key value; do
+            if [[ "$key" == "out_time_us" && "$value" =~ ^[0-9]+$ ]]; then
+                CURRENT_MS="$value"
+                PERCENT=$(( CURRENT_MS * 100 / DURATION_MS ))
+                [[ $PERCENT -gt 100 ]] && PERCENT=100
+
+                CURRENT_SEC=$(( CURRENT_MS / 1000000 ))
+                CURRENT_STR=$(format_time "$CURRENT_SEC")
+
+                printf "\r[PROCESSING] Progress: %3d%% (%s / %s)" "$PERCENT" "$CURRENT_STR" "$TOTAL_STR"
+            elif [[ "$key" == "progress" && "$value" == "end" ]]; then
+                echo -e "\r[PROCESSING] Progress: 100% - Complete."
+            fi
+        done
     then
 
         echo "[SUCCESS] FFmpeg completed."
