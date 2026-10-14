@@ -302,6 +302,64 @@ Processed: 1
 Skipped:   1
 Failed:    0
 ```
+
+## Watching directores
+
+If you would like to watch a set of directories for new files and run the script when files are added you can use media-watcher.sh
+
+Make the script executable:
+```
+chmod +x media-watcher.sh
+```
+
+Create the systemd directory if it doesn't already exist:
+```
+mkdir -p ~/.config/systemd/user/
+```
+Create the service file:
+```
+vim ~/.config/systemd/user/media-normalizer.service
+```
+Paste the following values (remember to replace /path/to/media-watcher.sh with the actual path to your watcher script)
+```
+[Unit]
+Description=Automatic Audio Normalization Directory Watcher
+After=network.target local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/path/to/media-watcher.sh
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+```
+
+Next reload systemd to register the new service, enable it to start on boot and run it immediately:
+```
+# Reload systemd manager configuration
+systemctl --user daemon-reload
+
+# Enable the service to start automatically
+systemctl --user enable media-normalizer.service
+
+# Start the service right now
+systemctl --user start media-normalizer.service
+```
+
+Check the status:
+```
+systemctl --user status media-normalizer.service
+```
+
+View the live logs:
+```
+journalctl --user -u media-normalizer.service -f
+```
+
 License
 
 MIT License
